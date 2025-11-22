@@ -39,6 +39,19 @@ NUM_CORES=$(nproc)
 echo "INFO: Procesando 1 video a la vez (usando $NUM_CORES hilos por conversión)."
 declare -A album_year_map
 
+# --- DETECCIÓN DE GPU Y CÓDECS ---
+USE_GPU=0
+if [ -e "/dev/dri/renderD128" ]; then
+    if ffmpeg -hide_banner -encoders 2>/dev/null | grep -q "h264_vaapi"; then
+        USE_GPU=1
+        echo "INFO: GPU Intel detectada y códec h264_vaapi disponible. Se usará aceleración por hardware."
+    else
+        echo "AVISO: GPU Intel detectada pero no se encontró el códec 'h264_vaapi'. Se usará CPU."
+    fi
+else
+    echo "INFO: No se detectó GPU Intel (/dev/dri/renderD128). Se usará CPU."
+fi
+
 # --- DEFINICIÓN DE FUNCIONES --- (La función process_video no cambia)
 
 get_file_date() {
@@ -62,11 +75,24 @@ process_video() {
     local base_name_sanitized=${base_name_raw// /_}
     echo "INICIANDO conversión de video (PID $$): $(basename "$file")"
     local TMP_DIR; TMP_DIR=$(mktemp -d); trap 'rm -rf "$TMP_DIR"' RETURN
-    local output_file_temp="$TMP_DIR/${base_name_raw}_AV1.mp4"
-    local svt_params="keyint=10s:input-depth=8:tune=0:film-grain=0:fast-decode=1:rc=0:lp=${num_threads}"
-    if ffmpeg -nostdin -i "$file" -c:v libsvtav1 -crf 38 -preset 6 -svtav1-params "$svt_params" -c:a copy -map_metadata 0 -movflags +faststart -y "$output_file_temp" &> /dev/null; then
+    local output_file_temp="$TMP_DIR/${base_name_raw}_H264.mp4"
+    
+    local ffmpeg_cmd=(ffmpeg -nostdin -i "$file")
+    
+    if [ "$USE_GPU" -eq 1 ]; then
+        # Configuración GPU: H.264 VAAPI, QP 28
+        ffmpeg_cmd+=(-vaapi_device /dev/dri/renderD128 -vf "format=nv12,hwupload,scale_vaapi=w=-2:h=1080" -c:v h264_vaapi -qp 28)
+    else
+        # Configuración CPU: libx264, CRF 24, preset veryfast
+        ffmpeg_cmd+=(-vf "scale=-2:1080" -c:v libx264 -crf 24 -preset veryfast)
+    fi
+
+    # Configuración común: Audio AAC 128k, Metadata, Movflags
+    ffmpeg_cmd+=(-c:a aac -b:a 128k -map_metadata 0 -movflags +faststart -y "$output_file_temp")
+
+    if "${ffmpeg_cmd[@]}" &> /dev/null; then
         echo "  -> Conversión de '$(basename "$file")' exitosa."
-        local final_dest_file="$dest_path/${base_name_sanitized}_AV1.mp4"
+        local final_dest_file="$dest_path/${base_name_sanitized}_H264.mp4"
         mv -n "$output_file_temp" "$final_dest_file"
         echo "  -> Moviendo convertido a: $final_dest_file"
         local original_filename_raw=$(basename "$file"); local original_filename_sanitized=${original_filename_raw// /_}
@@ -119,8 +145,8 @@ while IFS= read -r file; do
     elif [ "$file_type" == "video" ]; then
         # === INICIO DE LOS NUEVOS CAMBIOS ===
 
-        # 1. Comprobar si el archivo en origen YA es AV1. Si es así, solo moverlo.
-        if [[ "$filename_raw" == *"_AV1."* ]]; then
+        # 1. Comprobar si el archivo en origen YA es H264 (convertido por este script). Si es así, solo moverlo.
+        if [[ "$filename_raw" == *"_H264."* ]]; then
             final_dest_file="$dest_path/$filename_sanitized"
             echo "SALTANDO (ya convertido): Moviendo directamente $filename_raw -> $final_dest_file"
             mv -n "$file" "$final_dest_file"
@@ -131,7 +157,7 @@ while IFS= read -r file; do
         ext="${file##*.}"
         base_name_raw=$(basename "$file" ."$ext")
         base_name_sanitized=${base_name_raw// /_}
-        potential_target_file="$dest_path/${base_name_sanitized}_AV1.mp4"
+        potential_target_file="$dest_path/${base_name_sanitized}_H264.mp4"
 
         if [ -f "$potential_target_file" ]; then
             echo "SALTANDO (destino ya existe): El archivo '$potential_target_file' ya existe."
