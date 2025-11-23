@@ -117,20 +117,30 @@ get_album_year() {
     date +%Y
 }
 
-# Función para obtener nombre de archivo único (manejo de duplicados)
-get_unique_filename() {
-    local dir="$1"
-    local filename="$2"
-    local base="${filename%.*}"
-    local ext="${filename##*.}"
-    local new_name="$filename"
-    local counter=1
+# Función para mover archivos de forma inteligente (comprobando contenido)
+smart_move() {
+    local src="$1"
+    local dest_dir="$2"
+    local filename="$3"
     
-    while [ -e "$dir/$new_name" ]; do
-        new_name="${base}_${counter}.${ext}"
-        ((counter++))
-    done
-    echo "$new_name"
+    local dest_file="$dest_dir/$filename"
+    
+    if [ -f "$dest_file" ]; then
+        # El archivo existe, comprobamos si es idéntico
+        if cmp -s "$src" "$dest_file"; then
+            echo "  -> Archivo idéntico detectado en destino. Sobrescribiendo: $filename"
+            mv -f "$src" "$dest_file"
+        else
+            # Es diferente, buscamos nombre único
+            local new_filename=$(get_unique_filename "$dest_dir" "$filename")
+            echo "  -> Archivo diferente con mismo nombre. Renombrando: $filename -> $new_filename"
+            mv -n "$src" "$dest_dir/$new_filename"
+        fi
+    else
+        # No existe, mover normal
+        echo "  -> Moviendo: $filename"
+        mv -n "$src" "$dest_file"
+    fi
 }
 
 process_video() {
@@ -162,28 +172,21 @@ process_video() {
     if "${ffmpeg_cmd[@]}" &> /dev/null; then
         echo "  -> Conversión de '$(basename "$file")' exitosa."
         
-        # Manejo de duplicados en destino
+        # Mover video convertido (usando smart_move por seguridad, aunque el nombre suele ser nuevo)
         local final_filename="${base_name_sanitized}_H264.mp4"
-        final_filename=$(get_unique_filename "$dest_path" "$final_filename")
-        local final_dest_file="$dest_path/$final_filename"
+        smart_move "$output_file_temp" "$dest_path" "$final_filename"
         
-        mv -n "$output_file_temp" "$final_dest_file"
-        echo "  -> Moviendo convertido a: $final_dest_file"
-        
-        # Manejo de duplicados en originales
+        # Mover original a originales (usando smart_move para evitar duplicados innecesarios)
         local original_filename_raw=$(basename "$file")
         local original_filename_sanitized=${original_filename_raw// /_}
-        original_filename_sanitized=$(get_unique_filename "$originals_dir" "$original_filename_sanitized")
-        
-        mv -n "$file" "$originals_dir/$original_filename_sanitized"
-        echo "  -> Moviendo original a: $originals_dir/$original_filename_sanitized"
+        smart_move "$file" "$originals_dir" "$original_filename_sanitized"
     else
         echo "ERROR: Falló la conversión de '$(basename "$file")'. El original se dejará en su sitio."
     fi
     trap - RETURN; rm -rf "$TMP_DIR"
     echo "FINALIZADA conversión de video (PID $$): $(basename "$file")"
 }
-export -f process_video get_file_date get_unique_filename
+export -f process_video get_file_date get_unique_filename smart_move
 
 # --- PROCESAMIENTO PRINCIPAL ---
 echo "Iniciando la organización de '$SOURCE_DIR'..."
@@ -226,22 +229,15 @@ while IFS= read -r file; do
     filename_raw=$(basename "$file"); filename_sanitized=${filename_raw// /_}
 
     if [ "$file_type" == "image" ]; then
-        # Manejo de duplicados
-        final_filename=$(get_unique_filename "$dest_path" "$filename_sanitized")
-        final_dest_file="$dest_path/$final_filename"
-        
-        echo "MOVIENDO IMAGEN: $filename_raw -> $final_dest_file"
-        mv -n "$file" "$final_dest_file"
+        # Usar smart_move para imágenes
+        smart_move "$file" "$dest_path" "$filename_sanitized"
 
     elif [ "$file_type" == "video" ]; then
         
         # 1. Comprobar si el archivo en origen YA es H264
         if [[ "$filename_raw" == *"_H264."* ]]; then
-            final_filename=$(get_unique_filename "$dest_path" "$filename_sanitized")
-            final_dest_file="$dest_path/$final_filename"
-            
-            echo "SALTANDO (ya convertido): Moviendo directamente $filename_raw -> $final_dest_file"
-            mv -n "$file" "$final_dest_file"
+            echo "SALTANDO (ya convertido): $(basename "$file")"
+            smart_move "$file" "$dest_path" "$filename_sanitized"
             continue
         fi
         
@@ -254,11 +250,8 @@ while IFS= read -r file; do
         if [ -f "$potential_target_file" ]; then
             echo "SALTANDO (destino ya existe): El archivo '$potential_target_file' ya existe."
             
-            original_filename_sanitized=${filename_raw// /_}
-            original_filename_sanitized=$(get_unique_filename "$ORIGINALS_DIR" "$original_filename_sanitized")
-            
-            mv -n "$file" "$ORIGINALS_DIR/$original_filename_sanitized"
-            echo "  -> Moviendo original '$filename_raw' a $ORIGINALS_DIR/$original_filename_sanitized"
+            local original_filename_sanitized=${filename_raw// /_}
+            smart_move "$file" "$ORIGINALS_DIR" "$original_filename_sanitized"
             continue
         fi
 
