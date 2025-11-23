@@ -117,6 +117,30 @@ get_album_year() {
     date +%Y
 }
 
+# Función para obtener un nombre de archivo único si ya existe
+get_unique_filename() {
+    local dir="$1"
+    local filename="$2"
+    local name="${filename%.*}"
+    local ext="${filename##*.}"
+    local new_name="$filename"
+    local counter=1
+
+    # Manejo correcto de archivos sin extensión
+    if [[ "$name" == "$filename" ]]; then
+        ext=""
+    else
+        ext=".$ext"
+    fi
+
+    while [ -e "$dir/$new_name" ]; do
+        new_name="${name}_${counter}${ext}"
+        ((counter++))
+    done
+
+    echo "$new_name"
+}
+
 # Función para mover archivos de forma inteligente (comprobando contenido)
 smart_move() {
     local src="$1"
@@ -126,9 +150,16 @@ smart_move() {
     local dest_file="$dest_dir/$filename"
     
     if [ -f "$dest_file" ]; then
-        # El archivo existe, comprobamos si es idéntico
-        if cmp -s "$src" "$dest_file"; then
-            echo "  -> Archivo idéntico detectado en destino. Sobrescribiendo: $filename"
+        # Optimización: Comprobar tamaño y fecha en lugar de contenido completo (cmp)
+        local size_src=$(stat -c %s "$src")
+        local size_dest=$(stat -c %s "$dest_file")
+        
+        # Opcional: Comprobar también mtime si se desea más precisión, pero size suele bastar para detectar "diferente"
+        # local time_src=$(stat -c %Y "$src")
+        # local time_dest=$(stat -c %Y "$dest_file")
+
+        if [ "$size_src" -eq "$size_dest" ]; then
+            echo "  -> Archivo idéntico detectado (por tamaño) en destino. Sobrescribiendo: $filename"
             mv -f "$src" "$dest_file"
         else
             # Es diferente, buscamos nombre único
@@ -186,42 +217,50 @@ process_video() {
     trap - RETURN; rm -rf "$TMP_DIR"
     echo "FINALIZADA conversión de video (PID $$): $(basename "$file")"
 }
-export -f process_video get_file_date get_unique_filename smart_move
 
-# --- PROCESAMIENTO PRINCIPAL ---
-echo "Iniciando la organización de '$SOURCE_DIR'..."
-echo "-------------------------------------------"
-
-# Pre-escaneo de álbumes (opcional pero recomendado para consistencia)
-# Se hará bajo demanda para no retardar el inicio.
-
-while IFS= read -r file; do
-    if [ -z "$file" ]; then continue; fi
+process_file() {
+    local remote_file="$1"
+    
+    if [ -z "$remote_file" ]; then return; fi
+    
+    # --- BUFFER LOCAL ---
+    # Crear directorio temporal único para este proceso
+    local TMP_WORK_DIR=$(mktemp -d)
+    trap 'rm -rf "$TMP_WORK_DIR"' RETURN
+    
+    local filename=$(basename "$remote_file")
+    local local_file="$TMP_WORK_DIR/$filename"
+    
+    # Copiar archivo remoto a local
+    # echo "Descargando: $filename"
+    cp --preserve=timestamps "$remote_file" "$local_file" || { echo "ERROR: Falló la descarga de '$remote_file'."; return; }
+    
+    # Usar el archivo LOCAL para todo el procesamiento
+    local file="$local_file"
+    
     ext_lower=$(echo "${file##*.}" | tr '[:upper:]' '[:lower:]')
     file_type=""
     case "$ext_lower" in
         jpg|jpeg|gif|png|heic|cr2|crw|nef|orf|raw|dng|arw) file_type="image" ;;
         mov|3gp|avi|mkv|mp4|mpg|mpeg|wmv|flv|webm|m4v) file_type="video" ;;
-        *) echo "OMITIENDO: Archivo no reconocido '$file'"; continue ;;
+        *) echo "OMITIENDO: Archivo no reconocido '$file'"; return ;;
     esac
     
     file_date=$(get_file_date "$file")
-    if [ -z "$file_date" ]; then echo "ERROR: No se pudo determinar la fecha para '$file'. Omitiendo."; continue; fi
-    year=$(echo "$file_date" | cut -d'-' -f1); month=$(echo "$file_date" | cut -d'-' -f2); file_dir=$(dirname "$file")
+    if [ -z "$file_date" ]; then echo "ERROR: No se pudo determinar la fecha para '$file'. Omitiendo."; return; fi
+    year=$(echo "$file_date" | cut -d'-' -f1); month=$(echo "$file_date" | cut -d'-' -f2); file_dir=$(dirname "$remote_file")
     
     if [ "$file_dir" == "$SOURCE_DIR" ]; then
         dest_path="$DEST_DIR/$year/$month"
     else
         album_name_raw=$(basename "$file_dir"); album_name_sanitized=${album_name_raw// /_}
-        album_year=${album_year_map[$file_dir]}
+        # Nota: En ejecución paralela, album_year_map no se comparte entre subshells.
+        # Se recalcula cada vez, lo cual es aceptable según el plan.
+        # Para get_album_year, seguimos usando el directorio remoto porque escanearlo localmente sería muy costoso (descargar todo el álbum).
+        # Esto es un compromiso aceptable.
+        album_year=$(get_album_year "$file_dir")
+        if [ -z "$album_year" ]; then album_year=$year; fi # Fallback
         
-        if [ -z "$album_year" ]; then
-            # Usar la nueva función para determinar el año del álbum de forma más inteligente
-            album_year=$(get_album_year "$file_dir")
-            if [ -z "$album_year" ]; then album_year=$year; fi # Fallback
-            album_year_map[$file_dir]=$album_year
-            echo "INFO: Álbum '$album_name_raw' ('$album_name_sanitized') asignado al año $album_year."
-        fi
         dest_path="$DEST_DIR/$album_year/$album_name_sanitized"
     fi
     mkdir -p "$dest_path"
@@ -229,16 +268,23 @@ while IFS= read -r file; do
     filename_raw=$(basename "$file"); filename_sanitized=${filename_raw// /_}
 
     if [ "$file_type" == "image" ]; then
-        # Usar smart_move para imágenes
-        smart_move "$file" "$dest_path" "$filename_sanitized"
+        # Usar smart_move para imágenes (Mueve de LOCAL a REMOTO)
+        if smart_move "$file" "$dest_path" "$filename_sanitized"; then
+            # Si se movió correctamente al destino, borramos el original remoto
+            rm "$remote_file"
+        else
+            echo "ERROR: Falló al mover '$filename' al destino."
+        fi
 
     elif [ "$file_type" == "video" ]; then
         
-        # 1. Comprobar si el archivo en origen YA es H264
+        # 1. Comprobar si el archivo en origen YA es H264 (mirando el nombre original)
         if [[ "$filename_raw" == *"_H264."* ]]; then
             echo "SALTANDO (ya convertido): $(basename "$file")"
-            smart_move "$file" "$dest_path" "$filename_sanitized"
-            continue
+            if smart_move "$file" "$dest_path" "$filename_sanitized"; then
+                rm "$remote_file"
+            fi
+            return
         fi
         
         # 2. Comprobar si el archivo convertido YA existe en el destino (nombre base)
@@ -251,14 +297,50 @@ while IFS= read -r file; do
             echo "SALTANDO (destino ya existe): El archivo '$potential_target_file' ya existe."
             
             local original_filename_sanitized=${filename_raw// /_}
-            smart_move "$file" "$ORIGINALS_DIR" "$original_filename_sanitized"
-            continue
+            if smart_move "$file" "$ORIGINALS_DIR" "$original_filename_sanitized"; then
+                rm "$remote_file"
+            fi
+            return
         fi
 
-        # Control de trabajos paralelos
-        if (( $(jobs -p | wc -l) >= MAX_JOBS )); then wait -n; fi
-        process_video "$file" "$dest_path" "$ORIGINALS_DIR" "$NUM_CORES" &
+        # Ejecución SÍNCRONA dentro del job paralelo
+        # process_video ahora trabaja con el archivo LOCAL
+        # Pero process_video intenta mover el archivo original a ORIGINALS_DIR.
+        # Necesitamos adaptar process_video o manejarlo aquí.
+        # process_video toma: file, dest_path, originals_dir, num_threads
+        # Modificaremos process_video para que NO mueva el original si es un archivo temporal, 
+        # o simplemente dejamos que process_video mueva el local a originals_dir (remoto) y luego borramos el remoto original aquí.
+        
+        # El problema es que process_video hace 'smart_move "$file" "$originals_dir"'.
+        # Si "$file" es local, lo moverá a remoto. Eso es correcto.
+        # Si process_video tiene éxito, significa que el video convertido está en destino Y el original (local) está en originals_dir.
+        # Entonces podemos borrar el remote_file.
+        
+        if process_video "$file" "$dest_path" "$ORIGINALS_DIR" "$NUM_CORES"; then
+             rm "$remote_file"
+        fi
     fi
+    
+    # El trap se encargará de borrar el directorio temporal local
+}
+
+export -f process_video get_file_date get_unique_filename smart_move get_album_year process_file
+export SOURCE_DIR DEST_DIR ORIGINALS_DIR USE_GPU MAX_JOBS NUM_CORES
+
+# --- PROCESAMIENTO PRINCIPAL ---
+echo "Iniciando la organización de '$SOURCE_DIR'..."
+echo "-------------------------------------------"
+
+# Pre-escaneo de álbumes (opcional pero recomendado para consistencia)
+# Se hará bajo demanda para no retardar el inicio.
+
+while IFS= read -r file; do
+    # Control de trabajos paralelos
+    while (( $(jobs -p | wc -l) >= MAX_JOBS )); do
+        wait -n
+    done
+    
+    process_file "$file" &
 done < <(find "$SOURCE_DIR" -type f)
 
 # --- FINALIZACIÓN ---

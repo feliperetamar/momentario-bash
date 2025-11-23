@@ -1,1 +1,3 @@
 entorno_de_prueba/
+*.log
+test_hang/
