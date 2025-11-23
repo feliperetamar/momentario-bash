@@ -273,10 +273,6 @@ echo "-------------------------------------------"
 echo "Todos los archivos han sido puestos en cola. Esperando a que terminen las conversiones restantes..."
 wait
 
-# --- LIMPIEZA ---
-echo "Limpiando directorios vacíos en origen..."
-find "$SOURCE_DIR" -mindepth 1 -type d -empty -delete
-
 echo "Todas las tareas han finalizado."
 echo "Proceso de organización completado."
 echo "=== FIN DEL PROCESO: $(date) ==="
