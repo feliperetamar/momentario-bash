@@ -1,0 +1,23 @@
+--- Creando entorno de prueba ---
+[0;32m[PASS][0m Entorno creado
+--- Ejecutando organizar_fotos.sh ---
+=== INICIO DEL PROCESO: dom 23 nov 2025 10:23:15 CET ===
+INFO: Configuración de paralelismo: MAX_JOBS=2
+INFO: Hilos por conversión (si aplica): 8
+INFO: GPU Intel detectada y códec h264_vaapi disponible. Se usará aceleración por hardware.
+Iniciando la organización de '/home/luisfe/antigravity/momentario-bash/entorno_de_prueba/origen'...
+-------------------------------------------
+INFO: Álbum 'Vacaciones Navidad' ('Vacaciones_Navidad') asignado al año 2022.
+SALTANDO (destino ya existe): El archivo '/home/luisfe/antigravity/momentario-bash/entorno_de_prueba/destino/2022/Vacaciones_Navidad/video_duplicado_H264.mp4' ya existe.
+  -> Moviendo original 'video duplicado.mov' a /home/luisfe/antigravity/momentario-bash/entorno_de_prueba/videos_originales/video_duplicado.mov
+MOVIENDO IMAGEN: foto con exif.jpg -> /home/luisfe/antigravity/momentario-bash/entorno_de_prueba/destino/2023/05/foto_con_exif_1.jpg
+INFO: Álbum 'Album Viaje a la Playa' ('Album_Viaje_a_la_Playa') asignado al año 2023.
+MOVIENDO IMAGEN: en la arena.jpg -> /home/luisfe/antigravity/momentario-bash/entorno_de_prueba/destino/2023/Album_Viaje_a_la_Playa/en_la_arena.jpg
+SALTANDO (ya convertido): Moviendo directamente video ya procesado_H264.mp4 -> /home/luisfe/antigravity/momentario-bash/entorno_de_prueba/destino/2023/Album_Viaje_a_la_Playa/video_ya_procesado_H264.mp4
+-------------------------------------------
+Todos los archivos han sido puestos en cola. Esperando a que terminen las conversiones restantes...
+INICIANDO conversión de video (PID 12086): video raiz.mp4
+  -> Conversión de 'video raiz.mp4' exitosa.
+  -> Moviendo convertido a: /home/luisfe/antigravity/momentario-bash/entorno_de_prueba/destino/2024/02/video_raiz_H264.mp4
+  -> Moviendo original a: /home/luisfe/antigravity/momentario-bash/entorno_de_prueba/videos_originales/video_raiz.mp4
+FINALIZADA conversión de video (PID 12086): video raiz.mp4

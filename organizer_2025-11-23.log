@@ -1,0 +1,75 @@
+=== INICIO DEL PROCESO: dom 23 nov 2025 10:25:04 CET ===
+INFO: Configuración de paralelismo: MAX_JOBS=2
+INFO: Hilos por conversión (si aplica): 8
+INFO: GPU Intel detectada y códec h264_vaapi disponible. Se usará aceleración por hardware.
+Iniciando la organización de '/home/luisfe/antigravity/momentario-bash/entorno_de_prueba/origen'...
+-------------------------------------------
+INFO: Álbum 'Vacaciones Navidad' ('Vacaciones_Navidad') asignado al año 2022.
+SALTANDO (destino ya existe): El archivo '/home/luisfe/antigravity/momentario-bash/entorno_de_prueba/destino/2022/Vacaciones_Navidad/video_duplicado_H264.mp4' ya existe.
+  -> Moviendo original 'video duplicado.mov' a /home/luisfe/antigravity/momentario-bash/entorno_de_prueba/videos_originales/video_duplicado.mov
+MOVIENDO IMAGEN: foto con exif.jpg -> /home/luisfe/antigravity/momentario-bash/entorno_de_prueba/destino/2023/05/foto_con_exif_1.jpg
+INFO: Álbum 'Album Viaje a la Playa' ('Album_Viaje_a_la_Playa') asignado al año 2023.
+MOVIENDO IMAGEN: en la arena.jpg -> /home/luisfe/antigravity/momentario-bash/entorno_de_prueba/destino/2023/Album_Viaje_a_la_Playa/en_la_arena.jpg
+SALTANDO (ya convertido): Moviendo directamente video ya procesado_H264.mp4 -> /home/luisfe/antigravity/momentario-bash/entorno_de_prueba/destino/2023/Album_Viaje_a_la_Playa/video_ya_procesado_H264.mp4
+-------------------------------------------
+Todos los archivos han sido puestos en cola. Esperando a que terminen las conversiones restantes...
+INICIANDO conversión de video (PID 13151): video raiz.mp4
+  -> Conversión de 'video raiz.mp4' exitosa.
+  -> Moviendo convertido a: /home/luisfe/antigravity/momentario-bash/entorno_de_prueba/destino/2024/02/video_raiz_H264.mp4
+  -> Moviendo original a: /home/luisfe/antigravity/momentario-bash/entorno_de_prueba/videos_originales/video_raiz.mp4
+FINALIZADA conversión de video (PID 13151): video raiz.mp4
+=== INICIO DEL PROCESO: dom 23 nov 2025 10:25:31 CET ===
+INFO: Configuración de paralelismo: MAX_JOBS=2
+INFO: Hilos por conversión (si aplica): 8
+INFO: GPU Intel detectada y códec h264_vaapi disponible. Se usará aceleración por hardware.
+Iniciando la organización de '/home/luisfe/antigravity/momentario-bash/entorno_de_prueba/origen'...
+-------------------------------------------
+INFO: Álbum 'Vacaciones Navidad' ('Vacaciones_Navidad') asignado al año 2022.
+SALTANDO (destino ya existe): El archivo '/home/luisfe/antigravity/momentario-bash/entorno_de_prueba/destino/2022/Vacaciones_Navidad/video_duplicado_H264.mp4' ya existe.
+  -> Moviendo original 'video duplicado.mov' a /home/luisfe/antigravity/momentario-bash/entorno_de_prueba/videos_originales/video_duplicado.mov
+MOVIENDO IMAGEN: foto con exif.jpg -> /home/luisfe/antigravity/momentario-bash/entorno_de_prueba/destino/2023/05/foto_con_exif_1.jpg
+INFO: Álbum 'Album Viaje a la Playa' ('Album_Viaje_a_la_Playa') asignado al año 2023.
+MOVIENDO IMAGEN: en la arena.jpg -> /home/luisfe/antigravity/momentario-bash/entorno_de_prueba/destino/2023/Album_Viaje_a_la_Playa/en_la_arena.jpg
+SALTANDO (ya convertido): Moviendo directamente video ya procesado_H264.mp4 -> /home/luisfe/antigravity/momentario-bash/entorno_de_prueba/destino/2023/Album_Viaje_a_la_Playa/video_ya_procesado_H264.mp4
+-------------------------------------------
+Todos los archivos han sido puestos en cola. Esperando a que terminen las conversiones restantes...
+INICIANDO conversión de video (PID 13582): video raiz.mp4
+  -> Conversión de 'video raiz.mp4' exitosa.
+  -> Moviendo convertido a: /home/luisfe/antigravity/momentario-bash/entorno_de_prueba/destino/2024/02/video_raiz_H264.mp4
+  -> Moviendo original a: /home/luisfe/antigravity/momentario-bash/entorno_de_prueba/videos_originales/video_raiz.mp4
+FINALIZADA conversión de video (PID 13582): video raiz.mp4
+=== INICIO DEL PROCESO: dom 23 nov 2025 10:34:02 CET ===
+INFO: Configuración de paralelismo: MAX_JOBS=2
+INFO: Hilos por conversión (si aplica): 8
+INFO: GPU Intel detectada y códec h264_vaapi disponible. Se usará aceleración por hardware.
+Iniciando la organización de '/home/luisfe/Downloads/202511_test_momentario_bash'...
+-------------------------------------------
+MOVIENDO IMAGEN: DSC02821.JPG -> /home/luisfe/Downloads/202511_destino_test_momentario_bash/2017/10/DSC02821.JPG
+MOVIENDO IMAGEN: DSC05744.JPG -> /home/luisfe/Downloads/202511_destino_test_momentario_bash/2023/04/DSC05744.JPG
+MOVIENDO IMAGEN: DSC05373.JPG -> /home/luisfe/Downloads/202511_destino_test_momentario_bash/2022/12/DSC05373.JPG
+MOVIENDO IMAGEN: DSC01494.JPG -> /home/luisfe/Downloads/202511_destino_test_momentario_bash/2017/06/DSC01494.JPG
+OMITIENDO: Archivo no reconocido '/home/luisfe/Downloads/202511_test_momentario_bash/ffmpeg_h264_cpu_gpu.sh'
+INICIANDO conversión de video (PID 14474): PXL_20250927_170440281.mp4
+MOVIENDO IMAGEN: DSC01685.JPG -> /home/luisfe/Downloads/202511_destino_test_momentario_bash/2017/06/DSC01685.JPG
+MOVIENDO IMAGEN: DSC05291.JPG -> /home/luisfe/Downloads/202511_destino_test_momentario_bash/2018/05/DSC05291.JPG
+MOVIENDO IMAGEN: DSC05730.JPG -> /home/luisfe/Downloads/202511_destino_test_momentario_bash/2023/04/DSC05730.JPG
+MOVIENDO IMAGEN: DSC01636.JPG -> /home/luisfe/Downloads/202511_destino_test_momentario_bash/2017/06/DSC01636.JPG
+MOVIENDO IMAGEN: DSC05064.JPG -> /home/luisfe/Downloads/202511_destino_test_momentario_bash/2018/04/DSC05064.JPG
+MOVIENDO IMAGEN: DSC03204.JPG -> /home/luisfe/Downloads/202511_destino_test_momentario_bash/2017/11/DSC03204.JPG
+OMITIENDO: Archivo no reconocido '/home/luisfe/Downloads/202511_test_momentario_bash/ffmpeg_h264_cpu_gpu-v2.sh'
+MOVIENDO IMAGEN: DSC05367.JPG -> /home/luisfe/Downloads/202511_destino_test_momentario_bash/2022/12/DSC05367.JPG
+MOVIENDO IMAGEN: DSC02656.JPG -> /home/luisfe/Downloads/202511_destino_test_momentario_bash/2021/04/DSC02656.JPG
+MOVIENDO IMAGEN: DSC06130.JPG -> /home/luisfe/Downloads/202511_destino_test_momentario_bash/2023/07/DSC06130.JPG
+MOVIENDO IMAGEN: DSC01626.JPG -> /home/luisfe/Downloads/202511_destino_test_momentario_bash/2017/06/DSC01626.JPG
+INICIANDO conversión de video (PID 14474): PXL_20250924_154224838.mp4
+MOVIENDO IMAGEN: DSC02461.JPG -> /home/luisfe/Downloads/202511_destino_test_momentario_bash/2021/03/DSC02461.JPG
+-------------------------------------------
+Todos los archivos han sido puestos en cola. Esperando a que terminen las conversiones restantes...
+  -> Conversión de 'PXL_20250927_170440281.mp4' exitosa.
+  -> Moviendo convertido a: /home/luisfe/Downloads/202511_destino_test_momentario_bash/2025/09/PXL_20250927_170440281_H264.mp4
+  -> Moviendo original a: /home/luisfe/Downloads/202511_originales_test_momentario_bash/PXL_20250927_170440281.mp4
+FINALIZADA conversión de video (PID 14474): PXL_20250927_170440281.mp4
+  -> Conversión de 'PXL_20250924_154224838.mp4' exitosa.
+  -> Moviendo convertido a: /home/luisfe/Downloads/202511_destino_test_momentario_bash/2025/09/PXL_20250924_154224838_H264.mp4
+  -> Moviendo original a: /home/luisfe/Downloads/202511_originales_test_momentario_bash/PXL_20250924_154224838.mp4
+FINALIZADA conversión de video (PID 14474): PXL_20250924_154224838.mp4
