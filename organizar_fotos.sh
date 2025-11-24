@@ -40,6 +40,10 @@ LOCK_FILE="/tmp/organizer.lock"
 exec 200>"$LOCK_FILE"
 flock -n 200 || { echo "Otra instancia del script ya se está ejecutando." >&2; exit 1; }
 
+# --- CONFIGURACIÓN DE LOCK GLOBAL PARA MOVER ---
+# Un único archivo de lock para serializar las operaciones de movimiento
+MOVE_LOCK_FILE="/tmp/organizer_move.lock"
+
 # --- CONFIGURACIÓN ---
 # Paralelismo configurable
 MAX_JOBS=${MAX_JOBS:-1}
@@ -48,6 +52,7 @@ echo "INFO: Configuración de paralelismo: MAX_JOBS=$MAX_JOBS"
 echo "INFO: Hilos por conversión (si aplica): $NUM_CORES"
 
 declare -A album_year_map
+declare -A mkdir_cache
 
 # --- DETECCIÓN DE GPU Y CÓDECS ---
 USE_GPU=0
@@ -69,22 +74,37 @@ get_file_date() {
     local date_str=""
     
     # 1. Intentar con exiv2 (DateTimeOriginal) - Más rápido
-    # exiv2 output format example: "2023:12:01 14:30:00" -> sed to "2023-12-01"
-    date_str=$(exiv2 -g DateTimeOriginal -Pv "$file" 2>/dev/null | head -n1 | sed 's/:/-/g' | cut -d' ' -f1)
-    if [[ "$date_str" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then echo "$date_str"; return; fi
+    date_str=$(exiv2 -g DateTimeOriginal -Pv "$file" 2>/dev/null | head -n1)
+    if [[ "$date_str" =~ ^[0-9]{4}:[0-9]{2}:[0-9]{2} ]]; then
+        # Usar parameter expansion en lugar de sed/cut
+        echo "${date_str:0:4}-${date_str:5:2}-${date_str:8:2}"
+        return
+    fi
 
     # 2. Intentar con exiv2 (DateCreated - para algunos RAWs/XMP)
-    date_str=$(exiv2 -g DateCreated -Pv "$file" 2>/dev/null | head -n1 | sed 's/:/-/g' | cut -d' ' -f1)
-    if [[ "$date_str" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then echo "$date_str"; return; fi
+    date_str=$(exiv2 -g DateCreated -Pv "$file" 2>/dev/null | head -n1)
+    if [[ "$date_str" =~ ^[0-9]{4}:[0-9]{2}:[0-9]{2} ]]; then
+        echo "${date_str:0:4}-${date_str:5:2}-${date_str:8:2}"
+        return
+    fi
 
     # 3. Fallback a mediainfo (útil para videos si exiv2 falla)
-    date_str=$(mediainfo --Output="General;%Encoded_Date%" "$file" 2>/dev/null | sed 's/UTC //g' | cut -d' ' -f1)
-    if [[ "$date_str" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then echo "$date_str"; return; fi
+    date_str=$(mediainfo --Output="General;%Encoded_Date%" "$file" 2>/dev/null)
+    if [[ "$date_str" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2} ]]; then
+        echo "${date_str:0:10}"
+        return
+    fi
 
     # 4. Fallback al nombre del archivo
     local filename=$(basename "$file")
-    if [[ "$filename" =~ ([0-9]{4})[-_]?([0-9]{2})[-_]?([0-9]{2}) ]]; then echo "${BASH_REMATCH[1]}-${BASH_REMATCH[2]}-${BASH_REMATCH[3]}"; return; fi
-    if [[ "$filename" =~ ([0-9]{2})[-_]?([0-9]{2})[-_]?([0-9]{4}) ]]; then echo "${BASH_REMATCH[3]}-${BASH_REMATCH[2]}-${BASH_REMATCH[1]}"; return; fi
+    if [[ "$filename" =~ ([0-9]{4})[-_]?([0-9]{2})[-_]?([0-9]{2}) ]]; then
+        echo "${BASH_REMATCH[1]}-${BASH_REMATCH[2]}-${BASH_REMATCH[3]}"
+        return
+    fi
+    if [[ "$filename" =~ ([0-9]{2})[-_]?([0-9]{2})[-_]?([0-9]{4}) ]]; then
+        echo "${BASH_REMATCH[3]}-${BASH_REMATCH[2]}-${BASH_REMATCH[1]}"
+        return
+    fi
 
     # 5. Último recurso: fecha de modificación del archivo
     date -r "$file" "+%Y-%m-%d"
@@ -93,19 +113,21 @@ get_file_date() {
 # Función para determinar el año de un álbum escaneando los primeros archivos
 get_album_year() {
     local dir="$1"
-    local year_counts=()
-    local max_count=0
-    local best_year=""
+    
+    # Usar cache si ya se calculó para este directorio
+    if [[ -n "${album_year_map[$dir]}" ]]; then
+        echo "${album_year_map[$dir]}"
+        return
+    fi
     
     # Escanear hasta 5 archivos para adivinar el año
     local files_checked=0
     while IFS= read -r f; do
         d=$(get_file_date "$f")
-        y=$(echo "$d" | cut -d'-' -f1)
+        # Usar parameter expansion en lugar de cut
+        y="${d%%-*}"
         if [[ "$y" =~ ^[0-9]{4}$ ]]; then
-            # Simple conteo (bash 4+ associative arrays would be better but let's keep it simple logic)
-            # Just return the first valid year found for speed, or implement voting if critical.
-            # Para "optimización", devolver el primer año válido es suficiente mejora sobre "el primer archivo que toque el bucle principal".
+            album_year_map[$dir]="$y"
             echo "$y"
             return
         fi
@@ -114,7 +136,9 @@ get_album_year() {
     done < <(find "$dir" -maxdepth 1 -type f)
     
     # Si no se encuentra nada, usar año actual como fallback seguro
-    date +%Y
+    local current_year=$(date +%Y)
+    album_year_map[$dir]="$current_year"
+    echo "$current_year"
 }
 
 # Función para obtener un nombre de archivo único si ya existe
@@ -149,29 +173,35 @@ smart_move() {
     
     local dest_file="$dest_dir/$filename"
     
-    if [ -f "$dest_file" ]; then
-        # Optimización: Comprobar tamaño y fecha en lugar de contenido completo (cmp)
-        local size_src=$(stat -c %s "$src")
-        local size_dest=$(stat -c %s "$dest_file")
-        
-        # Opcional: Comprobar también mtime si se desea más precisión, pero size suele bastar para detectar "diferente"
-        # local time_src=$(stat -c %Y "$src")
-        # local time_dest=$(stat -c %Y "$dest_file")
-
-        if [ "$size_src" -eq "$size_dest" ]; then
-            echo "  -> Archivo idéntico detectado (por tamaño) en destino. Sobrescribiendo: $filename"
-            mv -f "$src" "$dest_file"
-        else
-            # Es diferente, buscamos nombre único
-            local new_filename=$(get_unique_filename "$dest_dir" "$filename")
-            echo "  -> Archivo diferente con mismo nombre. Renombrando: $filename -> $new_filename"
-            mv -n "$src" "$dest_dir/$new_filename"
+    # Calcular path relativo al destino para logging
+    local rel_dest_path="${dest_dir#$DEST_DIR}"
+    rel_dest_path="${rel_dest_path#/}"  # Quitar / inicial si existe
+    
+    # --- LOCKING START ---
+    (
+        if ! flock -w 60 -x 202; then
+            echo "ERROR: Timeout esperando lock para $filename. Saltando."
+            exit 1
         fi
-    else
-        # No existe, mover normal
-        echo "  -> Moviendo: $filename"
-        mv -n "$src" "$dest_file"
-    fi
+        
+        if [ -f "$dest_file" ]; then
+            local size_src=$(stat -c %s "$src")
+            local size_dest=$(stat -c %s "$dest_file")
+            
+            if [ "$size_src" -eq "$size_dest" ]; then
+                echo "  ✓ $filename -> $rel_dest_path/ (idéntico, sobrescribiendo)"
+                mv -f "$src" "$dest_file"
+            else
+                local new_filename=$(get_unique_filename "$dest_dir" "$filename")
+                echo "  ✓ $filename -> $rel_dest_path/$new_filename (renombrado, ya existía diferente)"
+                mv -n "$src" "$dest_dir/$new_filename"
+            fi
+        else
+            echo "  ✓ $filename -> $rel_dest_path/ (nuevo)"
+            mv -n "$src" "$dest_file"
+        fi
+    ) 202>"$MOVE_LOCK_FILE"
+    # --- LOCKING END ---
 }
 
 process_video() {
@@ -184,7 +214,7 @@ process_video() {
     local base_name_sanitized=${base_name_raw// /_}
     
     echo "INICIANDO conversión de video (PID $$): $(basename "$file")"
-    local TMP_DIR; TMP_DIR=$(mktemp -d); trap 'rm -rf "$TMP_DIR"' RETURN
+    local TMP_DIR; TMP_DIR=$(mktemp -d); trap 'rm -rf "$TMP_DIR"' EXIT
     local output_file_temp="$TMP_DIR/${base_name_raw}_H264.mp4"
     
     local ffmpeg_cmd=(ffmpeg -nostdin -i "$file")
@@ -226,19 +256,31 @@ process_file() {
     # --- BUFFER LOCAL ---
     # Crear directorio temporal único para este proceso
     local TMP_WORK_DIR=$(mktemp -d)
-    trap 'rm -rf "$TMP_WORK_DIR"' RETURN
+    trap 'rm -rf "$TMP_WORK_DIR"' EXIT
     
     local filename=$(basename "$remote_file")
     local local_file="$TMP_WORK_DIR/$filename"
     
+    # --- FILTRADO DE ARCHIVOS TEMPORALES ---
+    case "$filename" in
+        *.tacitpart|*.tmp|*.part)
+            echo "OMITIENDO: Archivo temporal detectado '$filename'"
+            return
+            ;;
+    esac
+
     # Copiar archivo remoto a local
-    # echo "Descargando: $filename"
-    cp --preserve=timestamps "$remote_file" "$local_file" || { echo "ERROR: Falló la descarga de '$remote_file'."; return; }
+    if ! cp --preserve=timestamps "$remote_file" "$local_file"; then
+        echo "ERROR: Falló la descarga de '$remote_file'. Saltando."
+        return
+    fi
     
     # Usar el archivo LOCAL para todo el procesamiento
     local file="$local_file"
     
-    ext_lower=$(echo "${file##*.}" | tr '[:upper:]' '[:lower:]')
+    # Optimización: usar bash 4.0+ lowercase en lugar de tr
+    ext_lower="${filename##*.}"
+    ext_lower="${ext_lower,,}"
     file_type=""
     case "$ext_lower" in
         jpg|jpeg|gif|png|heic|cr2|crw|nef|orf|raw|dng|arw) file_type="image" ;;
@@ -248,7 +290,10 @@ process_file() {
     
     file_date=$(get_file_date "$file")
     if [ -z "$file_date" ]; then echo "ERROR: No se pudo determinar la fecha para '$file'. Omitiendo."; return; fi
-    year=$(echo "$file_date" | cut -d'-' -f1); month=$(echo "$file_date" | cut -d'-' -f2); file_dir=$(dirname "$remote_file")
+    # Usar parameter expansion en lugar de cut
+    year="${file_date%%-*}"
+    month="${file_date:5:2}"
+    file_dir=$(dirname "$remote_file")
     
     if [ "$file_dir" == "$SOURCE_DIR" ]; then
         dest_path="$DEST_DIR/$year/$month"
@@ -263,7 +308,12 @@ process_file() {
         
         dest_path="$DEST_DIR/$album_year/$album_name_sanitized"
     fi
-    mkdir -p "$dest_path"
+    
+    # Optimización: mkdir con cache para evitar llamadas redundantes
+    if [[ -z "${mkdir_cache[$dest_path]}" ]]; then
+        mkdir -p "$dest_path"
+        mkdir_cache[$dest_path]=1
+    fi
     
     filename_raw=$(basename "$file"); filename_sanitized=${filename_raw// /_}
 
@@ -329,12 +379,11 @@ process_file() {
              rm "$remote_file"
         fi
     fi
-    
-    # El trap se encargará de borrar el directorio temporal local
 }
 
 export -f process_video get_file_date get_unique_filename smart_move get_album_year process_file
-export SOURCE_DIR DEST_DIR ORIGINALS_DIR USE_GPU MAX_JOBS NUM_CORES
+export SOURCE_DIR DEST_DIR ORIGINALS_DIR USE_GPU MAX_JOBS NUM_CORES MOVE_LOCK_FILE
+export -A album_year_map mkdir_cache
 
 # --- PROCESAMIENTO PRINCIPAL ---
 echo "Iniciando la organización de '$SOURCE_DIR'..."
@@ -343,6 +392,9 @@ echo "-------------------------------------------"
 # Pre-escaneo de álbumes (opcional pero recomendado para consistencia)
 # Se hará bajo demanda para no retardar el inicio.
 
+# Array para rastrear PIDs de trabajos en segundo plano
+declare -a job_pids=()
+
 while IFS= read -r file; do
     # Control de trabajos paralelos
     while (( $(jobs -p | wc -l) >= MAX_JOBS )); do
@@ -350,13 +402,29 @@ while IFS= read -r file; do
     done
     
     process_file "$file" &
-done < <(find "$SOURCE_DIR" -type f)
+    job_pids+=($!)
+done < <(find "$SOURCE_DIR" -type f \( \
+    -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.gif" -o -iname "*.png" -o \
+    -iname "*.heic" -o -iname "*.cr2" -o -iname "*.crw" -o -iname "*.nef" -o \
+    -iname "*.orf" -o -iname "*.raw" -o -iname "*.dng" -o -iname "*.arw" -o \
+    -iname "*.mov" -o -iname "*.3gp" -o -iname "*.avi" -o -iname "*.mkv" -o \
+    -iname "*.mp4" -o -iname "*.mpg" -o -iname "*.mpeg" -o -iname "*.wmv" -o \
+    -iname "*.flv" -o -iname "*.webm" -o -iname "*.m4v" \
+\))
 
 # --- FINALIZACIÓN ---
 echo "-------------------------------------------"
 echo "Todos los archivos han sido puestos en cola. Esperando a que terminen las conversiones restantes..."
-wait
+echo "Esperando ${#job_pids[@]} trabajos..."
+
+# Esperar explícitamente cada trabajo rastreado
+for pid in "${job_pids[@]}"; do
+    wait "$pid" 2>/dev/null || true
+done
 
 echo "Todas las tareas han finalizado."
 echo "Proceso de organización completado."
 echo "=== FIN DEL PROCESO: $(date) ==="
+
+# Limpieza final de locks (aunque flock debería manejarlos, es bueno borrar el archivo)
+rm -f "$MOVE_LOCK_FILE"
