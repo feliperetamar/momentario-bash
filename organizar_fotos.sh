@@ -278,16 +278,25 @@ process_file() {
 
     elif [ "$file_type" == "video" ]; then
         
-        # 1. Comprobar si el archivo en origen YA es H264 (mirando el nombre original)
-        if [[ "$filename_raw" == *"_H264."* ]]; then
-            echo "SALTANDO (ya convertido): $(basename "$file")"
+        # 1. Comprobar si el archivo en origen YA es AV1 (suffix _AV1.mp4) -> mover directo a destino (NO a originales)
+        if [[ "$filename_raw" == *_AV1.mp4 ]]; then
+            echo "SALTANDO (AV1 ya convertido): $(basename "$file")"
+            if smart_move "$file" "$dest_path" "$filename_sanitized"; then
+                rm "$remote_file"
+            fi
+            return
+        fi
+
+        # 2. Comprobar si el archivo en origen YA es H264 (mirando el nombre original) -> mover directo a destino
+        if [[ "$filename_raw" == *_H264.* ]]; then
+            echo "SALTANDO (H264 ya convertido): $(basename "$file")"
             if smart_move "$file" "$dest_path" "$filename_sanitized"; then
                 rm "$remote_file"
             fi
             return
         fi
         
-        # 2. Comprobar si el archivo convertido YA existe en el destino (nombre base)
+        # 3. Comprobar si el archivo convertido H264 YA existe en el destino (nombre base)
         ext="${file##*.}"
         base_name_raw=$(basename "$file" ."$ext")
         base_name_sanitized=${base_name_raw// /_}
