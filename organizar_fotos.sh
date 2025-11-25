@@ -9,15 +9,34 @@
 
 set -e
 
+SINGLE_ALBUM_MODE=0
+
+if [ "$1" == "--album" ]; then
+    SINGLE_ALBUM_MODE=1
+    shift
+fi
+
 if [ "$#" -ne 3 ]; then
     echo "Error: Se requieren 3 argumentos."
-    echo "Uso: $0 <directorio_origen> <directorio_destino> <directorio_videos_originales>"
+    if [ "$SINGLE_ALBUM_MODE" -eq 1 ]; then
+        echo "Uso: $0 --album <directorio_album> <directorio_destino> <directorio_videos_originales>"
+    else
+        echo "Uso: $0 <directorio_origen> <directorio_destino> <directorio_videos_originales>"
+    fi
     exit 1
 fi
 
 SOURCE_DIR=$(realpath "$1")
 DEST_DIR=$(realpath "$2")
 ORIGINALS_DIR=$(realpath "$3")
+
+if [ "$SINGLE_ALBUM_MODE" -eq 1 ]; then
+    ALBUM_NAME_RAW=$(basename "$SOURCE_DIR")
+    ALBUM_NAME_SANITIZED=${ALBUM_NAME_RAW// /_}
+    echo "INFO: Modo Álbum Único activado."
+    echo "INFO: Álbum: $ALBUM_NAME_SANITIZED"
+    echo "INFO: Destino: $DEST_DIR/$ALBUM_NAME_SANITIZED"
+fi
 
 # Configuración de LOG
 LOG_FILE="organizer_$(date +%Y-%m-%d).log"
@@ -295,7 +314,10 @@ process_file() {
     month="${file_date:5:2}"
     file_dir=$(dirname "$remote_file")
     
-    if [ "$file_dir" == "$SOURCE_DIR" ]; then
+    if [ "$SINGLE_ALBUM_MODE" -eq 1 ]; then
+        # En modo álbum único, forzamos el destino al nombre del álbum sanitizado
+        dest_path="$DEST_DIR/$ALBUM_NAME_SANITIZED"
+    elif [ "$file_dir" == "$SOURCE_DIR" ]; then
         dest_path="$DEST_DIR/$year/$month"
     else
         album_name_raw=$(basename "$file_dir"); album_name_sanitized=${album_name_raw// /_}
@@ -382,7 +404,7 @@ process_file() {
 }
 
 export -f process_video get_file_date get_unique_filename smart_move get_album_year process_file
-export SOURCE_DIR DEST_DIR ORIGINALS_DIR USE_GPU MAX_JOBS NUM_CORES MOVE_LOCK_FILE
+export SOURCE_DIR DEST_DIR ORIGINALS_DIR USE_GPU MAX_JOBS NUM_CORES MOVE_LOCK_FILE SINGLE_ALBUM_MODE ALBUM_NAME_SANITIZED
 export -A album_year_map mkdir_cache
 
 # --- PROCESAMIENTO PRINCIPAL ---

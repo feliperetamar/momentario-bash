@@ -26,8 +26,24 @@ Si no se detecta GPU, el script usará automáticamente la CPU.
 
 ```bash
 chmod +x organizar_fotos.sh
+
+# Modo Estándar (Auto-organización por fecha/álbum)
 ./organizar_fotos.sh <origen> <destino> <originales>
+
+# Modo Álbum Único (Forzar destino)
+./organizar_fotos.sh --album <ruta_album> <destino> <originales>
 ```
+
+### Modos de Funcionamiento
+
+1.  **Modo Estándar**:
+    *   Archivos en raíz -> `Destino/Año/Mes/`
+    *   Archivos en subcarpetas -> `Destino/Año/Nombre_Subcarpeta/`
+
+2.  **Modo Álbum Único (`--album`)**:
+    *   Toma todo el contenido de `<ruta_album>` y lo mueve a `Destino/Nombre_Album_Sanitizado/`.
+    *   Ignora la fecha para la estructura de carpetas.
+    *   Útil para forzar la organización de un evento específico.
 
 ### Opciones
 *   **Paralelismo**: Define `MAX_JOBS` para procesar varios videos a la vez.
