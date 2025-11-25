@@ -284,7 +284,7 @@ process_file() {
     file_type=""
     case "$ext_lower" in
         jpg|jpeg|gif|png|heic|cr2|crw|nef|orf|raw|dng|arw) file_type="image" ;;
-        mov|3gp|avi|mkv|mp4|mpg|mpeg|wmv|flv|webm|m4v) file_type="video" ;;
+        mov|3gp|avi|mkv|mp4|mpg|mpeg|wmv|flv|webm|m4v|mts) file_type="video" ;;
         *) echo "OMITIENDO: Archivo no reconocido '$file'"; return ;;
     esac
     
@@ -409,7 +409,7 @@ done < <(find "$SOURCE_DIR" -type f \( \
     -iname "*.orf" -o -iname "*.raw" -o -iname "*.dng" -o -iname "*.arw" -o \
     -iname "*.mov" -o -iname "*.3gp" -o -iname "*.avi" -o -iname "*.mkv" -o \
     -iname "*.mp4" -o -iname "*.mpg" -o -iname "*.mpeg" -o -iname "*.wmv" -o \
-    -iname "*.flv" -o -iname "*.webm" -o -iname "*.m4v" \
+    -iname "*.flv" -o -iname "*.webm" -o -iname "*.m4v" -o -iname "*.mts" \
 \))
 
 # --- FINALIZACIÓN ---
