@@ -133,7 +133,7 @@ get_file_date() {
         if [[ "$year" -ge 1900 && "$year" -le "$current_year" ]]; then
             # Validate month (01-12)
             if [[ "$month" -ge 1 && "$month" -le 12 ]]; then
-                # Validate day (01-31) - basic validation
+                # Validate day (01-31) - basic validation, does not check month-specific limits
                 if [[ "$day" -ge 1 && "$day" -le 31 ]]; then
                     # Format with leading zeros
                     printf "%04d-%02d-%02d\n" "$year" "$month" "$day"
@@ -158,7 +158,7 @@ get_file_date() {
         if [[ "$year" -ge 1900 && "$year" -le "$current_year" ]]; then
             # Validate month (01-12)
             if [[ "$month" -ge 1 && "$month" -le 12 ]]; then
-                # Validate day (01-31) - basic validation
+                # Validate day (01-31) - basic validation, does not check month-specific limits
                 if [[ "$day" -ge 1 && "$day" -le 31 ]]; then
                     # Format with leading zeros
                     printf "%04d-%02d-%02d\n" "$year" "$month" "$day"
