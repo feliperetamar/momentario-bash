@@ -116,13 +116,56 @@ get_file_date() {
 
     # 4. Fallback al nombre del archivo
     local filename=$(basename "$file")
+    local current_year=$(date +%Y)
+    
+    # Pattern 1: YYYY-MM-DD or YYYYMMDD
     if [[ "$filename" =~ ([0-9]{4})[-_]?([0-9]{2})[-_]?([0-9]{2}) ]]; then
-        echo "${BASH_REMATCH[1]}-${BASH_REMATCH[2]}-${BASH_REMATCH[3]}"
-        return
+        local year="${BASH_REMATCH[1]}"
+        local month="${BASH_REMATCH[2]}"
+        local day="${BASH_REMATCH[3]}"
+        
+        # Force base-10 interpretation by removing leading zeros
+        year=$((10#$year))
+        month=$((10#$month))
+        day=$((10#$day))
+        
+        # Validate year (1900 to current year)
+        if [[ "$year" -ge 1900 && "$year" -le "$current_year" ]]; then
+            # Validate month (01-12)
+            if [[ "$month" -ge 1 && "$month" -le 12 ]]; then
+                # Validate day (01-31) - basic validation
+                if [[ "$day" -ge 1 && "$day" -le 31 ]]; then
+                    # Format with leading zeros
+                    printf "%04d-%02d-%02d\n" "$year" "$month" "$day"
+                    return
+                fi
+            fi
+        fi
     fi
+    
+    # Pattern 2: DD-MM-YYYY or DDMMYYYY
     if [[ "$filename" =~ ([0-9]{2})[-_]?([0-9]{2})[-_]?([0-9]{4}) ]]; then
-        echo "${BASH_REMATCH[3]}-${BASH_REMATCH[2]}-${BASH_REMATCH[1]}"
-        return
+        local day="${BASH_REMATCH[1]}"
+        local month="${BASH_REMATCH[2]}"
+        local year="${BASH_REMATCH[3]}"
+        
+        # Force base-10 interpretation by removing leading zeros
+        year=$((10#$year))
+        month=$((10#$month))
+        day=$((10#$day))
+        
+        # Validate year (1900 to current year)
+        if [[ "$year" -ge 1900 && "$year" -le "$current_year" ]]; then
+            # Validate month (01-12)
+            if [[ "$month" -ge 1 && "$month" -le 12 ]]; then
+                # Validate day (01-31) - basic validation
+                if [[ "$day" -ge 1 && "$day" -le 31 ]]; then
+                    # Format with leading zeros
+                    printf "%04d-%02d-%02d\n" "$year" "$month" "$day"
+                    return
+                fi
+            fi
+        fi
     fi
 
     # 5. Último recurso: fecha de modificación del archivo
