@@ -310,9 +310,8 @@ process_video() {
     )
 
     local -a ffmpeg_cmd_gpu=(
-        ffmpeg -nostdin -i "$file" \
-        -vaapi_device /dev/dri/renderD128 \
-        -vf "format=nv12,hwupload,scale_vaapi=w=-2:h=1080" -c:v h264_vaapi -qp 28 \
+        ffmpeg -nostdin -vaapi_device /dev/dri/renderD128 -i "$file" \
+        -vf "scale=-2:1080,format=nv12,hwupload" -c:v h264_vaapi -qp 28 \
         -c:a aac -b:a 128k -map_metadata 0 -movflags +faststart -y "$output_file_temp"
     )
 
