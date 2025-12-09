@@ -88,6 +88,28 @@ fi
 
 # --- DEFINICIÓN DE FUNCIONES ---
 
+# Función para esperar si /tmp está muy lleno (solo para videos)
+wait_for_tmp_space() {
+    local max_tmp_usage_mb=2048  # 2GB
+    local file_type="$1"
+    
+    # Solo controlar para videos
+    if [ "$file_type" != "video" ]; then
+        return 0
+    fi
+    
+    while true; do
+        local tmp_usage_mb=$(df -m /tmp | awk 'NR==2 {print $3}')
+        
+        if [ "$tmp_usage_mb" -lt "$max_tmp_usage_mb" ]; then
+            return 0
+        fi
+        
+        echo "ESPERANDO: /tmp está usando ${tmp_usage_mb}MB (límite: ${max_tmp_usage_mb}MB). Esperando 5s..."
+        sleep 5
+    done
+}
+
 get_file_date() {
     local file="$1"
     local date_str=""
@@ -350,6 +372,9 @@ process_file() {
         *) echo "OMITIENDO: Archivo no reconocido '$file'"; return ;;
     esac
     
+    # Esperar si /tmp está lleno (solo para videos)
+    wait_for_tmp_space "$file_type"
+    
     file_date=$(get_file_date "$file")
     if [ -z "$file_date" ]; then echo "ERROR: No se pudo determinar la fecha para '$file'. Omitiendo."; return; fi
     # Usar parameter expansion en lugar de cut
@@ -393,13 +418,10 @@ process_file() {
 
     elif [ "$file_type" == "video" ]; then
         
-        # 1. Comprobar si el archivo en origen YA es AV1 (suffix _AV1.mp4) -> mover directo a destino (NO a originales)
+        # 1. Comprobar si el archivo en origen YA es AV1 (suffix _AV1.mp4) -> convertir a H264
         if [[ "$filename_raw" == *_AV1.mp4 ]]; then
-            echo "SALTANDO (AV1 ya convertido): $(basename "$file")"
-            if smart_move "$file" "$dest_path" "$filename_sanitized"; then
-                rm "$remote_file"
-            fi
-            return
+            echo "INFO: Video AV1 detectado, convirtiendo a H264: $(basename "$file")"
+            # Continuar al proceso de conversión (no return aquí)
         fi
 
         # 2. Comprobar si el archivo en origen YA es H264 (mirando el nombre original) -> mover directo a destino
@@ -418,7 +440,7 @@ process_file() {
         potential_target_file="$dest_path/${base_name_sanitized}_H264.mp4"
 
         if [ -f "$potential_target_file" ]; then
-            echo "SALTANDO (destino ya existe): El archivo '$potential_target_file' ya existe."
+            echo "SALTANDO (destino H264 ya existe): El archivo '$potential_target_file' ya existe."
             
             local original_filename_sanitized=${filename_raw// /_}
             if smart_move "$file" "$ORIGINALS_DIR" "$original_filename_sanitized"; then
@@ -446,7 +468,7 @@ process_file() {
     fi
 }
 
-export -f process_video get_file_date get_unique_filename smart_move get_album_year process_file
+export -f process_video get_file_date get_unique_filename smart_move get_album_year process_file wait_for_tmp_space
 export SOURCE_DIR DEST_DIR ORIGINALS_DIR USE_GPU MAX_JOBS NUM_CORES MOVE_LOCK_FILE SINGLE_ALBUM_MODE ALBUM_NAME_SANITIZED
 export -A album_year_map mkdir_cache
 
