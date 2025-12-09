@@ -92,6 +92,8 @@ fi
 wait_for_tmp_space() {
     local max_tmp_usage_mb=2048  # 2GB
     local file_type="$1"
+    local tmp_root="${TMPDIR:-/tmp}"
+    local tmp_prefix="organizer"
     
     # Solo controlar para videos
     if [ "$file_type" != "video" ]; then
@@ -99,7 +101,14 @@ wait_for_tmp_space() {
     fi
     
     while true; do
-        local tmp_usage_mb=$(df -m /tmp | awk 'NR==2 {print $3}')
+        local tmp_usage_mb=0
+        shopt -s nullglob
+        local tmp_dirs=("$tmp_root"/"$tmp_prefix"*)
+        shopt -u nullglob
+
+        if [ ${#tmp_dirs[@]} -gt 0 ]; then
+            tmp_usage_mb=$(du -sm "${tmp_dirs[@]}" 2>/dev/null | awk '{sum+=$1} END {print sum+0}')
+        fi
         
         if [ "$tmp_usage_mb" -lt "$max_tmp_usage_mb" ]; then
             return 0
@@ -298,7 +307,8 @@ process_video() {
     local base_name_sanitized=${base_name_raw// /_}
     
     echo "INICIANDO conversión de video (PID $$): $(basename "$file")"
-    local TMP_DIR; TMP_DIR=$(mktemp -d); trap 'rm -rf "$TMP_DIR"' EXIT
+    local TMP_DIR; TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/organizer-video.XXXXXX")
+    trap 'rm -rf "$TMP_DIR"' RETURN
     local output_file_temp="$TMP_DIR/${base_name_raw}_H264.mp4"
     local ffmpeg_log="$TMP_DIR/ffmpeg.log"
     local success=0
@@ -346,12 +356,8 @@ process_video() {
         smart_move "$file" "$originals_dir" "$original_filename_sanitized"
     else
         echo "ERROR: Falló la conversión de '$(basename "$file")'. El original se dejará en su sitio."
-        trap - EXIT
-        rm -rf "$TMP_DIR"
         return 1
     fi
-    trap - EXIT
-    rm -rf "$TMP_DIR"
     echo "FINALIZADA conversión de video (PID $$): $(basename "$file")"
     return 0
 }
@@ -363,8 +369,8 @@ process_file() {
     
     # --- BUFFER LOCAL ---
     # Crear directorio temporal único para este proceso
-    local TMP_WORK_DIR=$(mktemp -d)
-    trap 'rm -rf "$TMP_WORK_DIR"' EXIT
+    local TMP_WORK_DIR=$(mktemp -d "${TMPDIR:-/tmp}/organizer-file.XXXXXX")
+    trap 'rm -rf "$TMP_WORK_DIR"' RETURN
     
     local filename=$(basename "$remote_file")
     local local_file="$TMP_WORK_DIR/$filename"
