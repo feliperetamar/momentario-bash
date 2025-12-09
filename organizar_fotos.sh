@@ -300,21 +300,41 @@ process_video() {
     echo "INICIANDO conversión de video (PID $$): $(basename "$file")"
     local TMP_DIR; TMP_DIR=$(mktemp -d); trap 'rm -rf "$TMP_DIR"' EXIT
     local output_file_temp="$TMP_DIR/${base_name_raw}_H264.mp4"
-    
-    local ffmpeg_cmd=(ffmpeg -nostdin -i "$file")
-    
+    local ffmpeg_log="$TMP_DIR/ffmpeg.log"
+    local success=0
+
+    local -a ffmpeg_cmd_cpu=(
+        ffmpeg -nostdin -i "$file" \
+        -vf "scale=-2:1080" -c:v libx264 -crf 24 -preset veryfast \
+        -c:a aac -b:a 128k -map_metadata 0 -movflags +faststart -y "$output_file_temp"
+    )
+
+    local -a ffmpeg_cmd_gpu=(
+        ffmpeg -nostdin -i "$file" \
+        -vaapi_device /dev/dri/renderD128 \
+        -vf "format=nv12,hwupload,scale_vaapi=w=-2:h=1080" -c:v h264_vaapi -qp 28 \
+        -c:a aac -b:a 128k -map_metadata 0 -movflags +faststart -y "$output_file_temp"
+    )
+
     if [ "$USE_GPU" -eq 1 ]; then
-        # Configuración GPU: H.264 VAAPI, QP 28
-        ffmpeg_cmd+=(-vaapi_device /dev/dri/renderD128 -vf "format=nv12,hwupload,scale_vaapi=w=-2:h=1080" -c:v h264_vaapi -qp 28)
-    else
-        # Configuración CPU: libx264, CRF 24, preset veryfast
-        ffmpeg_cmd+=(-vf "scale=-2:1080" -c:v libx264 -crf 24 -preset veryfast)
+        if "${ffmpeg_cmd_gpu[@]}" &> "$ffmpeg_log"; then
+            success=1
+        else
+            echo "AVISO: Falló la conversión con GPU para '$(basename "$file")'. Reintentando con CPU."
+            cat "$ffmpeg_log"
+        fi
     fi
 
-    # Configuración común: Audio AAC 128k, Metadata, Movflags
-    ffmpeg_cmd+=(-c:a aac -b:a 128k -map_metadata 0 -movflags +faststart -y "$output_file_temp")
+    if [ "$success" -eq 0 ]; then
+        if "${ffmpeg_cmd_cpu[@]}" &> "$ffmpeg_log"; then
+            success=1
+        else
+            echo "ERROR: ffmpeg falló al convertir '$(basename "$file")'. Log de ffmpeg:";
+            cat "$ffmpeg_log"
+        fi
+    fi
 
-    if "${ffmpeg_cmd[@]}" &> /dev/null; then
+    if [ "$success" -eq 1 ]; then
         echo "  -> Conversión de '$(basename "$file")' exitosa."
         
         # Mover video convertido (usando smart_move por seguridad, aunque el nombre suele ser nuevo)
