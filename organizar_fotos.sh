@@ -327,9 +327,14 @@ process_video() {
         smart_move "$file" "$originals_dir" "$original_filename_sanitized"
     else
         echo "ERROR: Falló la conversión de '$(basename "$file")'. El original se dejará en su sitio."
+        trap - EXIT
+        rm -rf "$TMP_DIR"
+        return 1
     fi
-    trap - RETURN; rm -rf "$TMP_DIR"
+    trap - EXIT
+    rm -rf "$TMP_DIR"
     echo "FINALIZADA conversión de video (PID $$): $(basename "$file")"
+    return 0
 }
 
 process_file() {
@@ -417,53 +422,41 @@ process_file() {
         fi
 
     elif [ "$file_type" == "video" ]; then
-        
-        # 1. Comprobar si el archivo en origen YA es AV1 (suffix _AV1.mp4) -> convertir a H264
-        if [[ "$filename_raw" == *_AV1.mp4 ]]; then
-            echo "INFO: Video AV1 detectado, convirtiendo a H264: $(basename "$file")"
-            # Continuar al proceso de conversión (no return aquí)
-        fi
-
-        # 2. Comprobar si el archivo en origen YA es H264 (mirando el nombre original) -> mover directo a destino
-        if [[ "$filename_raw" == *_H264.* ]]; then
-            echo "SALTANDO (H264 ya convertido): $(basename "$file")"
-            if smart_move "$file" "$dest_path" "$filename_sanitized"; then
-                rm "$remote_file"
-            fi
-            return
-        fi
-        
-        # 3. Comprobar si el archivo convertido H264 YA existe en el destino (nombre base)
         ext="${file##*.}"
         base_name_raw=$(basename "$file" ."$ext")
         base_name_sanitized=${base_name_raw// /_}
-        potential_target_file="$dest_path/${base_name_sanitized}_H264.mp4"
+        target_h264_name="${base_name_sanitized}_H264.mp4"
+        target_h264_path="$dest_path/$target_h264_name"
 
-        if [ -f "$potential_target_file" ]; then
-            echo "SALTANDO (destino H264 ya existe): El archivo '$potential_target_file' ya existe."
-            
-            local original_filename_sanitized=${filename_raw// /_}
-            if smart_move "$file" "$ORIGINALS_DIR" "$original_filename_sanitized"; then
-                rm "$remote_file"
+        # Caso especial: ya es un archivo H264
+        if [[ "$filename_raw" == *_H264.* ]]; then
+            echo "INFO: Archivo H264 detectado ($filename_raw). Verificando destino..."
+            if [ -f "$dest_path/$filename_sanitized" ]; then
+                echo "  -> Ya existe en destino. Moviendo a videos_originales."
+                smart_move "$file" "$ORIGINALS_DIR" "$filename_sanitized"
+            else
+                echo "  -> No existe en destino. Moviendo a destino."
+                smart_move "$file" "$dest_path" "$filename_sanitized"
             fi
+            rm "$remote_file"
             return
         fi
 
-        # Ejecución SÍNCRONA dentro del job paralelo
-        # process_video ahora trabaja con el archivo LOCAL
-        # Pero process_video intenta mover el archivo original a ORIGINALS_DIR.
-        # Necesitamos adaptar process_video o manejarlo aquí.
-        # process_video toma: file, dest_path, originals_dir, num_threads
-        # Modificaremos process_video para que NO mueva el original si es un archivo temporal, 
-        # o simplemente dejamos que process_video mueva el local a originals_dir (remoto) y luego borramos el remoto original aquí.
-        
-        # El problema es que process_video hace 'smart_move "$file" "$originals_dir"'.
-        # Si "$file" es local, lo moverá a remoto. Eso es correcto.
-        # Si process_video tiene éxito, significa que el video convertido está en destino Y el original (local) está en originals_dir.
-        # Entonces podemos borrar el remote_file.
-        
+        # Si ya hay una versión H264 en destino, mover original a videos_originales y saltar
+        if [ -f "$target_h264_path" ]; then
+            echo "INFO: Ya existe versión H264 en destino ($target_h264_name). Moviendo original a videos_originales."
+            smart_move "$file" "$ORIGINALS_DIR" "$filename_sanitized"
+            rm "$remote_file"
+            return
+        fi
+
+        # No existe H264: convertir
+        echo "INFO: No existe versión H264 en destino. Iniciando conversión de $(basename "$file")..."
         if process_video "$file" "$dest_path" "$ORIGINALS_DIR" "$NUM_CORES"; then
-             rm "$remote_file"
+            rm "$remote_file"
+        else
+            echo "ERROR: No se completó la conversión de '$filename_raw'."
+            return
         fi
     fi
 }
