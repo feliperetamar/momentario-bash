@@ -39,7 +39,7 @@ if [ "$SINGLE_ALBUM_MODE" -eq 1 ]; then
 fi
 
 # Configuración de LOG
-LOG_FILE="organizer_$(date +%Y-%m-%d).log"
+LOG_FILE="/home/luisfe/scripts/logs/organizer_$(date +%Y-%m-%d).log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 echo "=== INICIO DEL PROCESO: $(date) ==="
